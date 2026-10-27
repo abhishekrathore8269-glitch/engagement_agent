@@ -4,14 +4,14 @@ Skill Wallet Capstone – Project 5. Offline, privacy-preserving classroom analy
 ## Run
 ```bash
 python -m venv .venv && source .venv/bin/activate      # Python 3.9 – 3.12
-pip install -r requirements.txt
+pip install -r requirements.txt   # works on Python 3.9 - 3.14
 streamlit run app.py
 ```
 Click **Load demo session** in the sidebar to explore every tab with no camera, mic or files.
 Tests: `python tests/test_core.py` (or `pytest -q`).
 
 ## Deploy on Streamlit Community Cloud
-Push this folder to GitHub → New app → main file `app.py`. `packages.txt` installs ffmpeg/libGL.
+Push this folder to GitHub → New app → main file `app.py`. In **Advanced settings** pick Python 3.11 (recommended: enables MediaPipe). On Python 3.13+ MediaPipe is skipped and the app uses OpenCV Haar detection automatically. `packages.txt` installs ffmpeg/libGL.
 No database, secrets or external services are needed.
 
 ## Architecture

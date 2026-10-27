@@ -34,26 +34,49 @@ HOP = 256
 # --------------------------------------------------------------------------- #
 # Loading
 # --------------------------------------------------------------------------- #
+def _resample(x: np.ndarray, native: int, sr: int) -> np.ndarray:
+    if native == sr:
+        return x
+    idx = np.linspace(0, len(x) - 1, int(len(x) * sr / native))
+    return np.interp(idx, np.arange(len(x)), x)
+
+
 def load_audio(path: str, sr: int = 16000) -> np.ndarray:
-    """Load any audio/video file (mp3, wav, m4a, mp4 ... needs ffmpeg for compressed) as mono."""
+    """Load audio as mono float32 at ``sr``.
+
+    Order of attempts: librosa (handles mp3/m4a/mp4 via ffmpeg) -> soundfile
+    (wav/flac/ogg, mp3 on recent libsndfile) -> built-in wave module (16-bit PCM WAV).
+    """
     y = None
+    errors = []
     if librosa is not None:
-        y, _ = librosa.load(path, sr=sr, mono=True)
-    else:  # minimal fallback: PCM wav only
-        import wave
-        with wave.open(path, "rb") as wf:
-            if wf.getsampwidth() != 2:
-                raise ValueError("Install librosa to read this audio format (fallback reads 16-bit WAV).")
-            raw = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
-            if wf.getnchannels() > 1:
-                raw = raw.reshape(-1, wf.getnchannels()).mean(axis=1)
-            native = wf.getframerate()
-        if native != sr:
-            idx = np.linspace(0, len(raw) - 1, int(len(raw) * sr / native))
-            raw = np.interp(idx, np.arange(len(raw)), raw)
-        y = raw
-    if y is None or len(y) < sr:
-        raise ValueError("Audio is shorter than 1 second or could not be decoded.")
+        try:
+            y, _ = librosa.load(path, sr=sr, mono=True)
+        except Exception as exc:
+            errors.append(f"librosa: {exc}")
+    if y is None:
+        try:
+            import soundfile as sf
+            data, native = sf.read(path, dtype="float32", always_2d=True)
+            y = _resample(data.mean(axis=1), native, sr)
+        except Exception as exc:
+            errors.append(f"soundfile: {exc}")
+    if y is None:
+        try:
+            import wave
+            with wave.open(path, "rb") as wf:
+                if wf.getsampwidth() != 2:
+                    raise ValueError("only 16-bit PCM WAV supported by the built-in reader")
+                raw = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+                if wf.getnchannels() > 1:
+                    raw = raw.reshape(-1, wf.getnchannels()).mean(axis=1)
+                y = _resample(raw, wf.getframerate(), sr)
+        except Exception as exc:
+            errors.append(f"wave: {exc}")
+    if y is None:
+        raise ValueError("Could not decode this audio file. Try a WAV/FLAC/OGG file. (" + "; ".join(errors) + ")")
+    if len(y) < sr:
+        raise ValueError("Audio is shorter than 1 second.")
     return np.asarray(y, dtype=np.float32)
 
 
